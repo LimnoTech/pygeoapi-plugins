@@ -29,12 +29,15 @@
 
 import os
 import pytest
+import boto3
+from moto import mock_aws
 
 from tempfile import TemporaryDirectory
 from pygeoapi_plugins.provider.mvt_cache import (
     MVTPostgresFilesystem,
     MVTPostgresCache,
     MVTPostgresRedis,
+    MVTPostgresS3,
 )
 
 
@@ -213,3 +216,72 @@ def test_redis_cache(config):
         )
         == tile
     )
+
+
+def test_s3_miss_cache_disable_at_z(config):
+    with mock_aws():
+        boto3.client('s3', region_name='us-east-1').create_bucket(
+            Bucket='test-bucket'
+        )
+        config['bucket'] = 'test-bucket'
+        config['key'] = 'fake-key'
+        config['secret'] = 'fake-secret'
+        config['region'] = 'us-east-1'
+
+        p = MVTPostgresS3(config)
+        assert (
+            p.get_tiles_from_cache(
+                tileset=TILESET,
+                z=Z,
+                x=X,
+                y=Y,
+            )
+            is None
+        )
+
+        tile = p.get_tiles(tileset=TILESET, z=Z, x=X, y=Y)
+
+        assert (
+            p.get_tiles_from_cache(
+                tileset=TILESET,
+                z=Z,
+                x=X,
+                y=Y,
+            )
+            != tile
+        )
+
+
+def test_s3_disable_at_z(config):
+    with mock_aws():
+        boto3.client('s3', region_name='us-east-1').create_bucket(
+            Bucket='test-bucket'
+        )
+        config['bucket'] = 'test-bucket'
+        config['key'] = 'fake-key'
+        config['secret'] = 'fake-secret'
+        config['region'] = 'us-east-1'
+        config['disable_cache_at_z'] = 14
+
+        p = MVTPostgresS3(config)
+        assert (
+            p.get_tiles_from_cache(
+                tileset=TILESET,
+                z=Z,
+                x=X,
+                y=Y,
+            )
+            is None
+        )
+
+        tile = p.get_tiles(tileset=TILESET, z=Z, x=X, y=Y)
+
+        assert (
+            p.get_tiles_from_cache(
+                tileset=TILESET,
+                z=Z,
+                x=X,
+                y=Y,
+            )
+            == tile
+        )

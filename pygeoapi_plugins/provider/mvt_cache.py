@@ -29,6 +29,7 @@
 
 import logging
 
+import fsspec
 import functools
 from pathlib import Path
 from redis import Redis
@@ -371,6 +372,71 @@ class MVTPostgresCache(MVTCacheProvider):
                     return False
 
         return True
+
+
+class MVTPostgresS3(MVTCacheProvider):
+    def __init__(self, provider_def):
+        """
+        Initialize object
+
+        :param provider_def: provider definition
+
+        :returns: pygeoapi_plugins.provider.mvt_cache.MVTPostgresS3
+        """
+        super().__init__(provider_def)
+
+        self.bucket = provider_def['bucket']
+        self.key_prefix = provider_def.get('key_prefix', '').strip('/')
+
+        # options credentials to override AWS IAM role access pattern
+        # our use for local development
+        storage_options = provider_def.get('s3_options', {})
+
+        self.fs = fsspec.filesystem('s3', **storage_options)
+
+    def get_tiles_from_cache(
+        self,
+        layer='default',
+        tileset=None,
+        z=None,
+        y=None,
+        x=None,
+        format_='pbf',
+    ):
+        path = self._get_tile_path(layer, tileset, z, y, x, format_)
+        LOGGER.debug(f'Checking for cached tile at {path}')
+        if self.fs.exists(path):
+            with self.fs.open(path, 'rb') as fh:
+                return fh.read()
+
+    def save_tiles_to_cache(
+        self,
+        tile,
+        layer='default',
+        tileset: str | None = None,
+        z: str | int | None = None,
+        y: str | int | None = None,
+        x: str | int | None = None,
+        format_: str = 'pbf',
+    ) -> bool:
+        if tile and isinstance(tile, bytes):
+            path = self._get_tile_path(layer, tileset, z, y, x, format_)
+            LOGGER.debug(f'Saving tile to {path}')
+            try:
+                with self.fs.open(path, 'wb') as fh:
+                    fh.write(tile)
+            except Exception as e:
+                LOGGER.error(f'Error while writing tile: {e}')
+                return False
+        return True
+
+    def _get_tile_path(self, layer, tileset, z, y, x, format_):
+        z, y, x = map(str, [z, y, x])
+        parts = [self.bucket]
+        if self.key_prefix:
+            parts.append(self.key_prefix)
+        parts.extend([layer, tileset, z, y, x])
+        return '/'.join(parts) + f'.{format_}'
 
 
 @functools.cache
