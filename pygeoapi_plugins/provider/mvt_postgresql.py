@@ -42,6 +42,7 @@ from geoalchemy2.functions import (
     ST_SimplifyPreserveTopology,
     ST_SnapToGrid,
     ST_Transform,
+    ST_Force2D,
 )
 
 from sqlalchemy.sql import select, func
@@ -331,9 +332,7 @@ class MVTPostgreSQLProvider_(MVTPostgreSQLProvider):
         # Build the query
         query = select(
             feature_id.label('id'),
-            ST_AsMVTGeom(func.ST_Force2D(geom_column), envelope).label(
-                'mvtgeom'
-            ),
+            ST_AsMVTGeom(ST_Force2D(geom_column), envelope).label('mvtgeom'),
             *self.fields.values(),
         ).filter(*filters)
 
