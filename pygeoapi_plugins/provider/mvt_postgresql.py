@@ -331,7 +331,9 @@ class MVTPostgreSQLProvider_(MVTPostgreSQLProvider):
         # Build the query
         query = select(
             feature_id.label('id'),
-            ST_AsMVTGeom(geom_column, envelope).label('mvtgeom'),
+            ST_AsMVTGeom(func.ST_Force2D(geom_column), envelope).label(
+                'mvtgeom'
+            ),
             *self.fields.values(),
         ).filter(*filters)
 
